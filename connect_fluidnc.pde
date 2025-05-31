@@ -2,7 +2,7 @@ import http.requests.*;
 
 import java.io.*;
 import java.net.*;
-import processing.net.*; 
+import processing.net.*;
 
 
 /// l1 1329
@@ -30,19 +30,22 @@ import processing.net.*;
 
 
 float[][] positions = {
-  { 1395.0,1295.0},
-  { 710.0,1557.0},
-  { 716.0,1371.0},
-  { 716.0,1143.0},
-  { 990.0,1245.0},
-  { 1271.0,1234.0},
-  { 1265.0,1240.0},
-  { 1395.0,1156.0},
-  { 1550.0,1201.0},
-  { 1666.0,1255.0},
-  { 1646.0,1433.0},
-  { 1814.0,1404.0},
-  { 2046.0,1364.0}
+  { 1814.0, 1404.0},
+  { 2046.0, 1364.0},
+  { 1395.0, 1295.0},
+  { 698.0, 1635.0},
+  { 716.0, 1371.0},
+  { 990.0, 1245.0},
+  { 1271.0, 1234.0},
+  { 1265.0, 1240.0},
+  { 1395.0, 1156.0},
+  { 1550.0, 1201.0},
+  { 1666.0, 1255.0},
+  { 1646.0, 1433.0},
+  {420.0,1341.0},
+  {290.0,1229.0},
+  {125.0,1191.0},
+  {405.0,1177.0},
   //{1757, 697}//,
   //{1615, 705}
 };
@@ -78,7 +81,7 @@ boolean motorsEnabled = true;
 // Auto-sequence variables
 boolean autoSequenceRunning = false;
 int currentSequencePosition = 0;
-int sequenceWaitTime = 5000; // 5 seconds default wait time in milliseconds
+int sequenceWaitTime = 15000; // 5 seconds default wait time in milliseconds
 int sequenceStartTime = 0;
 boolean waitingAfterReadTile = false;
 
@@ -86,14 +89,14 @@ PImage bg;
 
 void setup() {
   size(670, 600);
-  
+
   bg = loadImage("background.png");
-  
+
   // Calculate initial string lengths
   updateStringLengths();
-  
+
   connectToFluidNC();
-  
+
   println("Polargraph WASD Controls:");
   println("Machine Width: " + machineWidth + "mm");
   println("Current Position: X=" + currentX + ", Y=" + currentY);
@@ -120,34 +123,34 @@ void setup() {
 
 void draw() {
   background(255);
-  
+
   // Draw machine representation
   drawMachineVisualization();
-  
+
   // Display status
   displayStatus();
-  
+
   // Handle auto-sequence
   handleAutoSequence();
 }
 
 void handleAutoSequence() {
   if (!autoSequenceRunning) return;
-  
+
   if (waitingAfterReadTile) {
     // Check if wait time has elapsed
     if (millis() - sequenceStartTime >= sequenceWaitTime) {
       waitingAfterReadTile = false;
+      //currentSequencePosition = int(random(positions.length-1));
       currentSequencePosition++;
-      
       // Check if we've completed all positions
       if (currentSequencePosition >= positions.length) {
-        autoSequenceRunning = false;
+        //autoSequenceRunning = false;
         currentSequencePosition = 0;
-        println("Auto-sequence completed!");
-        return;
+        println("Auto-sequence completed, starting again!");
+        //return;
       }
-      
+
       // Move to next position
       moveToSequencePosition(currentSequencePosition);
     }
@@ -160,13 +163,22 @@ void moveToSequencePosition(int posIndex) {
     float targetY = positions[posIndex][1];
     
     println("Auto-sequence: Moving to position " + posIndex + ": (" + targetX + ", " + targetY + ")");
+    
+    // Calculate movement time before moving
+    float movementTime = calculateMovementTime(targetX, targetY);
+    
     moveToPosition(targetX, targetY);
     
-    // Send read_tile command after movement
-    delay(500); // Small delay to ensure movement is complete
-    sendReadTile(); // i cant know so i just have to put a huge delay
+    // Wait for calculated movement time + 5 seconds safety buffer
+    int totalWaitTime = (int)(movementTime * 1000 + 15000); // Convert to milliseconds and add 5 seconds
+    println("Calculated movement time: " + nf(movementTime, 0, 2) + " seconds");
+    println("Waiting " + (totalWaitTime/1000) + " seconds (movement + 5s buffer) before read_tile...");
     
-    // Start waiting timer
+    delay(totalWaitTime);
+    sendReadTile();
+    //delay(10000);
+    
+    // Start waiting timer for the sequence interval
     sequenceStartTime = millis();
     waitingAfterReadTile = true;
     
@@ -174,29 +186,47 @@ void moveToSequencePosition(int posIndex) {
   }
 }
 
+// New function to calculate movement time
+float calculateMovementTime(float targetX, float targetY) {
+  // Calculate total distance to move
+  float totalDist = sqrt(pow(targetX - currentX, 2) + pow(targetY - currentY, 2));
+  
+  // Calculate time based on feed rate (feedRate is in mm/min)
+  // Time = Distance / Speed
+  // Convert feedRate from mm/min to mm/sec for calculation
+  float feedRatePerSecond = feedRate / 60.0;
+  float movementTimeSeconds = totalDist / feedRatePerSecond;
+  
+  // Add some extra time for acceleration/deceleration and segment delays
+  int numSegments = max(1, (int)(totalDist / segmentLength));
+  float segmentDelayTime = (numSegments * 50) / 1000.0; // 50ms delay per segment converted to seconds
+  
+  return movementTimeSeconds + segmentDelayTime;
+}
+
 void drawMachineVisualization() {
   // Scale factor for visualization
   float scale = 0.25;
   float offsetX = 50;
   float offsetY = 50;
-  
-  image(bg, offsetX, offsetY-50,  machineWidth * scale, (machineHeight-300) * scale);
-  
+
+  image(bg, offsetX, offsetY-50, machineWidth * scale, (machineHeight-300) * scale);
+
   // Draw machine frame
   stroke(100);
   strokeWeight(2);
   line(offsetX, offsetY, offsetX + machineWidth * scale, offsetY);
-  
+
   // Draw current position
   float visX = offsetX + currentX * scale;
   float visY = offsetY + currentY * scale;
-  
+
   // Draw strings
   stroke(150, 150, 255);
   strokeWeight(1);
   line(offsetX, offsetY, visX, visY);  // L1 string
   line(offsetX + machineWidth * scale, offsetY, visX, visY);  // L2 string
-  
+
   // Draw gondola position
   if (autoSequenceRunning) {
     fill(255, 165, 0); // Orange when auto-sequence is running
@@ -205,7 +235,7 @@ void drawMachineVisualization() {
   }
   noStroke();
   ellipse(visX, visY, 16, 16);
-    
+
   // Draw coordinate system
   stroke(80);
   strokeWeight(1);
@@ -224,7 +254,7 @@ void displayStatus() {
   fill(255);
   textAlign(LEFT);
   int yPos = height - 160;
-  
+
   if (connected) {
     fill(0, 255, 0);
     text("● Connected", 20, yPos);
@@ -232,7 +262,7 @@ void displayStatus() {
     fill(255, 0, 0);
     text("● Disconnected", 20, yPos);
   }
-  
+
   fill(255, 0, 0);
   yPos += 20;
   text("Position: X=" + nf(currentX, 0, 1) + ", Y=" + nf(currentY, 0, 1), 20, yPos);
@@ -246,7 +276,7 @@ void displayStatus() {
   text("Accumulated X: " + accumulatedX, 20, yPos);
   yPos += 15;
   text("Accumulated Y: " + accumulatedY, 20, yPos);
-  
+
   // Auto-sequence status
   yPos += 20;
   if (autoSequenceRunning) {
@@ -276,17 +306,17 @@ void connectToFluidNC() {
     if (socket != null && !socket.isClosed()) {
       socket.close();
     }
-    
+
     socket = new Socket("192.168.31.131", 23);
     out = new PrintWriter(socket.getOutputStream(), true);
     in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     connected = true;
     println("Connected to FluidNC");
-    
+
     // Send initial homing or status
     sendCommand("?");
-    
-  } catch (Exception e) {
+  }
+  catch (Exception e) {
     connected = false;
     println("Connection failed: " + e.getMessage());
   }
@@ -297,7 +327,8 @@ void sendCommand(String command) {
     try {
       out.println(command);
       println("Sent: " + command);
-    } catch (Exception e) {
+    }
+    catch (Exception e) {
       println("Send error: " + e.getMessage());
       connected = false;
     }
@@ -313,7 +344,7 @@ void keyPressed() {
     }
     return;
   }
-  
+
   float targetX = currentX;
   float targetY = currentY;
   boolean shouldMove = false;
@@ -328,140 +359,140 @@ void keyPressed() {
       println("Moving to position " + positionIndex + ": (" + targetX + ", " + targetY + ")");
     }
   }
-  
+
   switch (key) {
-    case 'w':
-    case 'W':
-      // Move down (Y-)
-      targetY = currentY - stepSize;
-      shouldMove = true;
-      break;
-      
-    case 's':
-    case 'S':
-      // Move up (Y+)
-      targetY = currentY + stepSize;
-      shouldMove = true;
-      break;
-      
-    case 'a':
-    case 'A':
-      // Move left (X-)
-      targetX = currentX - stepSize;
-      shouldMove = true;
-      break;
-      
-    case 'd':
-    case 'D':
-      // Move right (X+)
-      targetX = currentX + stepSize;
-      shouldMove = true;
-      break;
-      
-    case 'h':
-    case 'H':
-      // Home to center
-      targetX = machineWidth / 2;
-      targetY = 1350;
-      shouldMove = true;
-      break;
-      
-    case 'z':
-    case 'Z':
-      // Set current position as 0,0 (reset reference)
-      println("Setting current position as 0,0");
-      currentX = 0;
-      currentY = 0;
-      accumulatedX = 0;
-      accumulatedY = 0;
-      updateStringLengths();
-      println("Position reset to (0,0)");
-      break;
-      
-    case 't':
-    case 'T':
-      // Toggle auto-sequence
-      if (autoSequenceRunning) {
-        autoSequenceRunning = false;
-        waitingAfterReadTile = false;
-        currentSequencePosition = 0;
-        println("Auto-sequence STOPPED");
-      } else {
-        autoSequenceRunning = true;
-        currentSequencePosition = 0;
-        waitingAfterReadTile = false;
-        println("Auto-sequence STARTED");
-        moveToSequencePosition(0);
-      }
-      break;
-      
-    case 'u':
-    case 'U':
-      // Decrease wait time
-      sequenceWaitTime -= 1000;
-      if (sequenceWaitTime < 1000) sequenceWaitTime = 1000;
-      println("Sequence wait time: " + (sequenceWaitTime/1000) + " seconds");
-      break;
-      
-    case 'i':
-    case 'I':
-      // Increase wait time
-      sequenceWaitTime += 1000;
-      if (sequenceWaitTime > 60000) sequenceWaitTime = 60000;
-      println("Sequence wait time: " + (sequenceWaitTime/1000) + " seconds");
-      break;
-      
-    case 'q':
-    case 'Q':
-      stepSize += 5.0;
-      if (stepSize > 300) stepSize = 300;
-      println("Step size: " + stepSize + "mm");
-      break;
-      
-    case 'e':
-    case 'E':
-      stepSize -= 5.0;
-      if (stepSize < 1.0) stepSize = 1.0;
-      println("Step size: " + stepSize + "mm");
-      break;
-      
-    case 'r':
-    case 'R':
-      connectToFluidNC();
-      break;
-      
-    case '!':
-      sendCommand("!");
-      println("EMERGENCY STOP SENT");
-      // Stop auto-sequence on emergency stop
+  case 'w':
+  case 'W':
+    // Move down (Y-)
+    targetY = currentY - stepSize;
+    shouldMove = true;
+    break;
+
+  case 's':
+  case 'S':
+    // Move up (Y+)
+    targetY = currentY + stepSize;
+    shouldMove = true;
+    break;
+
+  case 'a':
+  case 'A':
+    // Move left (X-)
+    targetX = currentX - stepSize;
+    shouldMove = true;
+    break;
+
+  case 'd':
+  case 'D':
+    // Move right (X+)
+    targetX = currentX + stepSize;
+    shouldMove = true;
+    break;
+
+  case 'h':
+  case 'H':
+    // Home to center
+    targetX = machineWidth / 2;
+    targetY = 1350;
+    shouldMove = true;
+    break;
+
+  case 'z':
+  case 'Z':
+    // Set current position as 0,0 (reset reference)
+    println("Setting current position as 0,0");
+    targetX = machineWidth / 2;
+    targetY = 1350;
+    accumulatedX = 0;
+    accumulatedY = 0;
+    updateStringLengths();
+    println("Position reset to (0,0)");
+    break;
+
+  case 't':
+  case 'T':
+    // Toggle auto-sequence
+    if (autoSequenceRunning) {
       autoSequenceRunning = false;
       waitingAfterReadTile = false;
-      break;
-      
-    case '?':
-      sendCommand("?");
-      break;
-     
-    case 'k':
-    case 'K':
-      sendReadTile();
-      break;
-    
-    case 'm':
-    case 'M':
-      // Toggle motor enable/disable
-      if (motorsEnabled) {
-        sendCommand("$MD");  // Motor disable command
-        motorsEnabled = false;
-        println("Motors DISABLED");
-      } else {
-        sendCommand("$ME");  // Motor enable command  
-        motorsEnabled = true;
-        println("Motors ENABLED");
-      }
-      break;
+      currentSequencePosition = 0;
+      println("Auto-sequence STOPPED");
+    } else {
+      autoSequenceRunning = true;
+      currentSequencePosition = 0;
+      waitingAfterReadTile = false;
+      println("Auto-sequence STARTED");
+      moveToSequencePosition(0);
+    }
+    break;
+
+  case 'u':
+  case 'U':
+    // Decrease wait time
+    sequenceWaitTime -= 1000;
+    if (sequenceWaitTime < 1000) sequenceWaitTime = 1000;
+    println("Sequence wait time: " + (sequenceWaitTime/1000) + " seconds");
+    break;
+
+  case 'i':
+  case 'I':
+    // Increase wait time
+    sequenceWaitTime += 1000;
+    if (sequenceWaitTime > 60000) sequenceWaitTime = 60000;
+    println("Sequence wait time: " + (sequenceWaitTime/1000) + " seconds");
+    break;
+
+  case 'q':
+  case 'Q':
+    stepSize += 5.0;
+    if (stepSize > 300) stepSize = 300;
+    println("Step size: " + stepSize + "mm");
+    break;
+
+  case 'e':
+  case 'E':
+    stepSize -= 5.0;
+    if (stepSize < 1.0) stepSize = 1.0;
+    println("Step size: " + stepSize + "mm");
+    break;
+
+  case 'r':
+  case 'R':
+    connectToFluidNC();
+    break;
+
+  case '!':
+    sendCommand("!");
+    println("EMERGENCY STOP SENT");
+    // Stop auto-sequence on emergency stop
+    autoSequenceRunning = false;
+    waitingAfterReadTile = false;
+    break;
+
+  case '?':
+    sendCommand("?");
+    break;
+
+  case 'k':
+  case 'K':
+    sendReadTile();
+    break;
+
+  case 'm':
+  case 'M':
+    // Toggle motor enable/disable
+    if (motorsEnabled) {
+      sendCommand("$MD");  // Motor disable command
+      motorsEnabled = false;
+      println("Motors DISABLED");
+    } else {
+      sendCommand("$ME");  // Motor enable command
+      motorsEnabled = true;
+      println("Motors ENABLED");
+    }
+    break;
   }
-  
+
   if (shouldMove && !autoSequenceRunning) {
     // Only allow manual movement when auto-sequence is not running
     // Validate bounds
@@ -469,12 +500,12 @@ void keyPressed() {
     if (targetX > machineWidth) targetX = machineWidth;
     if (targetY < 0) targetY = 0;
     if (targetY > machineHeight) targetY = machineHeight;
-    
+
     moveToPosition(targetX, targetY);
   } else if (shouldMove && autoSequenceRunning) {
     println("Cannot move manually while auto-sequence is running. Press 'T' to stop auto-sequence.");
   }
-  
+
   if (keyCode == ESC) {
     // Stop auto-sequence before disconnecting
     autoSequenceRunning = false;
@@ -494,34 +525,34 @@ void sendReadTile() {
 
 void moveToPosition(float targetX, float targetY) {
   println("Moving from (" + currentX + "," + currentY + ") to (" + targetX + "," + targetY + ")");
-  
+
   accumulatedX += targetX - currentX;
   accumulatedY += targetY - currentY;
-  
+
   // Calculate total distance
   float totalDist = sqrt(pow(targetX - currentX, 2) + pow(targetY - currentY, 2));
-  
+
   // Break into segments for smooth movement
   int numSegments = max(1, (int)(totalDist / segmentLength));
-  
+
   for (int i = 1; i <= numSegments; i++) {
     // Interpolate position
     float t = (float)i / numSegments;
     float segX = lerp(currentX, targetX, t);
     float segY = lerp(currentY, targetY, t);
-    
+
     // Calculate string lengths for this segment
     float[] stringLengths = calculateStringLengths(segX, segY);
     float newL1 = stringLengths[0];
     float newL2 = stringLengths[1];
-    
+
     // Calculate deltas in mm
     float deltaL1 = newL1 - currentL1;
     float deltaL2 = newL2 - currentL2;
-    
+
     // Send G-code command for this segment
     String command = "$J=G91 G21";
-    
+
     // Convert string length changes to motor movements
     // Assuming X axis controls L1 (left motor) and Y axis controls L2 (right motor)
     if (abs(deltaL1) > 0.1) {  // Only move if significant change
@@ -530,25 +561,25 @@ void moveToPosition(float targetX, float targetY) {
     if (abs(deltaL2) > 0.1) {
       command += " Y" + nf(deltaL2, 0, 3);
     }
-    
+
     command += " F" + feedRate;
-    
+
     if (command.contains("X") || command.contains("Y")) {
       sendCommand(command);
-      
+
       // Update current string lengths
       currentL1 = newL1;
       currentL2 = newL2;
-      
+
       // Small delay between segments
       delay(50);
     }
   }
-  
+
   // Update current position
   currentX = targetX;
   currentY = targetY;
-  
+
   println("Movement complete. New position: (" + currentX + "," + currentY + ")");
   println("String lengths: L1=" + currentL1 + ", L2=" + currentL2);
 }
@@ -556,10 +587,10 @@ void moveToPosition(float targetX, float targetY) {
 float[] calculateStringLengths(float x, float y) {
   // Calculate L1 (left string length) using Pythagorean theorem
   float L1 = sqrt(x * x + y * y);
-  
+
   // Calculate L2 (right string length)
   float L2 = sqrt(pow(machineWidth - x, 2) + y * y);
-  
+
   return new float[]{L1, L2};
 }
 
@@ -576,7 +607,8 @@ void disconnect() {
     }
     connected = false;
     println("Disconnected from FluidNC");
-  } catch (Exception e) {
+  }
+  catch (Exception e) {
     println("Disconnect error: " + e.getMessage());
   }
 }

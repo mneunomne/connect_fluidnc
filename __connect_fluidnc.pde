@@ -23,7 +23,7 @@ float[][] positions = {
     { 1646.0,1433.0},
     { 1814.0,1404.0},
     { 2046.0,1364.0}
-};
+}
 
 Socket socket;
 PrintWriter out;
