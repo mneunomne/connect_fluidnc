@@ -145,7 +145,7 @@ void moveToSequencePosition(int posIndex) {
     moveToPosition(targetX, targetY);
     
     // Send read_tile command after movement
-    delay(10000); // Small delay to ensure movement is complete
+    delay(500); // Small delay to ensure movement is complete
     sendReadTile(); // i cant know so i just have to put a huge delay
     
     // Start waiting timer
