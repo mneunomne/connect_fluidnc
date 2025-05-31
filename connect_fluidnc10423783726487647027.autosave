@@ -9,25 +9,15 @@ import processing.net.*;
 /// l2 1409
 
 
-/// 988.0,1303.0
-/// 717.0,1294.0
-/// 436.0,1261.0
-/// 436.0,1355.0
-/// 467.0,1538.0
-/// 710.0,1557.0
-/// 716.0,1380.0
-/// 716.0,1143.0
-/// 990.0,1245.0
-/// 1271.0,1234.0
-/// 1395.0,1290.0 /// vasco da gama
-/// 1265.0,1240.0
-/// 1395.0,1156.0
-/// 1550.0,1201.0
-//// 1666.0,1255.0
-/// 1646.0,1433.0
-/// 1814.0,1404.0
-/// 2046.0,1364.0
+/// X 930 y 890
 
+// 796 886
+
+// 581 871
+
+// 1162 737
+
+// 1040 808
 
 float[][] positions = {
   {930, 890},                                 // 1: Top left area
@@ -35,8 +25,8 @@ float[][] positions = {
   {581, 871},                                 // 3: Top right area
   {1162, 737},                                // 4: Middle left
   {1040, 808},                                // 5: Center
-  //{1757, 697}//,
-  //{1615, 705}
+  {1757, 697},
+  {1615, 705}
 };
 
 
@@ -48,13 +38,13 @@ BufferedReader in;
 boolean connected = false;
 
 // Polargraph physical parameters (adjust these to match your setup)
-float machineWidth = 2100.0;    // Distance between motors in mm
-float machineHeight = 2070.0;   // Height of drawing area in mm
+float machineWidth = 2200.0;    // Distance between motors in mm
+float machineHeight = 1700.0;   // Height of drawing area in mm
 float stepsPerMM = 80.0;       // Steps per mm (800 steps/rev, 84mm/rev belt)
 
 // Current position tracking
 float currentX = machineWidth / 2;  // Start at center
-float currentY = 1350;             // Start position Y
+float currentY = machineHeight / 2;             // Start position Y
 float currentL1, currentL2;         // Current string lengths
 
 // Movement parameters
@@ -155,7 +145,7 @@ void moveToSequencePosition(int posIndex) {
     moveToPosition(targetX, targetY);
     
     // Send read_tile command after movement
-    delay(500); // Small delay to ensure movement is complete
+    delay(10000); // Small delay to ensure movement is complete
     sendReadTile(); // i cant know so i just have to put a huge delay
     
     // Start waiting timer
@@ -354,7 +344,7 @@ void keyPressed() {
     case 'H':
       // Home to center
       targetX = machineWidth / 2;
-      targetY = 1350;
+      targetY = machineHeight / 2;
       shouldMove = true;
       break;
       
