@@ -4,51 +4,26 @@ import java.io.*;
 import java.net.*;
 import processing.net.*; 
 
-
-/// l1 1329
-/// l2 1409
-
-
-/// 988.0,1303.0
-/// 717.0,1294.0
-/// 436.0,1261.0
-/// 436.0,1355.0
-/// 467.0,1538.0
-/// 710.0,1557.0
-/// 716.0,1380.0
-/// 716.0,1143.0
-/// 990.0,1245.0
-/// 1271.0,1234.0
-/// 1395.0,1290.0 /// vasco da gama
-/// 1265.0,1240.0
-/// 1395.0,1156.0
-/// 1550.0,1201.0
-//// 1666.0,1255.0
-/// 1646.0,1433.0
-/// 1814.0,1404.0
-/// 2046.0,1364.0
-
-
 float[][] positions = {
-  { 1395.0,1295.0},
-  { 710.0,1557.0},
-  { 716.0,1371.0},
-  { 716.0,1143.0},
-  { 990.0,1245.0},
-  { 1271.0,1234.0},
-  { 1265.0,1240.0},
-  { 1395.0,1156.0},
-  { 1550.0,1201.0},
-  { 1666.0,1255.0},
-  { 1646.0,1433.0},
-  { 1814.0,1404.0},
-  { 2046.0,1364.0}
-  //{1757, 697}//,
-  //{1615, 705}
+    { 1395.0,1290.0},
+    { 988.0,1303.0},
+    { 717.0,1294.0},
+    { 436.0,1261.0},
+    { 436.0,1355.0},
+    { 467.0,1538.0},
+    { 710.0,1557.0},
+    { 716.0,1380.0},
+    { 716.0,1143.0},
+    { 990.0,1245.0},
+    { 1271.0,1234.0},
+    { 1265.0,1240.0},
+    { 1395.0,1156.0},
+    { 1550.0,1201.0},
+    { 1666.0,1255.0},
+    { 1646.0,1433.0},
+    { 1814.0,1404.0},
+    { 2046.0,1364.0}
 };
-
-
-
 
 Socket socket;
 PrintWriter out;
@@ -64,6 +39,7 @@ float stepsPerMM = 80.0;       // Steps per mm (800 steps/rev, 84mm/rev belt)
 float currentX = machineWidth / 2;  // Start at center
 float currentY = 1350;             // Start position Y
 float currentL1, currentL2;         // Current string lengths
+
 
 // Movement parameters
 float stepSize = 10.0;         // Movement distance in mm
@@ -81,6 +57,8 @@ int currentSequencePosition = 0;
 int sequenceWaitTime = 5000; // 5 seconds default wait time in milliseconds
 int sequenceStartTime = 0;
 boolean waitingAfterReadTile = false;
+boolean waitingForMovementComplete = false;
+int sequenceDelayBeforeRead = 0;
 
 PImage bg;
 
@@ -134,8 +112,22 @@ void draw() {
 void handleAutoSequence() {
   if (!autoSequenceRunning) return;
   
-  if (waitingAfterReadTile) {
-    // Check if wait time has elapsed
+  if (waitingForMovementComplete) {
+    // Check if movement + stabilization time has elapsed
+    if (millis() - sequenceStartTime >= sequenceDelayBeforeRead) {
+      waitingForMovementComplete = false;
+      
+      // Send read_tile command
+      sendReadTile();
+      
+      // Start waiting timer for user-defined wait time
+      sequenceStartTime = millis();
+      waitingAfterReadTile = true;
+      
+      println("Read tile command sent. Waiting " + (sequenceWaitTime/1000) + " seconds before next position...");
+    }
+  } else if (waitingAfterReadTile) {
+    // Check if user-defined wait time has elapsed
     if (millis() - sequenceStartTime >= sequenceWaitTime) {
       waitingAfterReadTile = false;
       currentSequencePosition++;
@@ -160,17 +152,24 @@ void moveToSequencePosition(int posIndex) {
     float targetY = positions[posIndex][1];
     
     println("Auto-sequence: Moving to position " + posIndex + ": (" + targetX + ", " + targetY + ")");
+    
+    // Calculate movement time estimate
+    float distance = sqrt(pow(targetX - currentX, 2) + pow(targetY - currentY, 2));
+    int movementTimeMs = (int)((distance / feedRate) * 60 * 1000); // Convert mm/min to ms
+    int cameraStabilizeMs = 1000; // 1 second for camera to stabilize
+    int totalDelayMs = movementTimeMs + cameraStabilizeMs;
+    
+    println("Estimated movement time: " + (movementTimeMs/1000.0) + "s + " + (cameraStabilizeMs/1000.0) + "s stabilization = " + (totalDelayMs/1000.0) + "s total");
+    
     moveToPosition(targetX, targetY);
     
-    // Send read_tile command after movement
-    delay(500); // Small delay to ensure movement is complete
-    sendReadTile(); // i cant know so i just have to put a huge delay
-    
-    // Start waiting timer
+    // Schedule read_tile command after estimated movement + stabilization time
     sequenceStartTime = millis();
-    waitingAfterReadTile = true;
+    sequenceDelayBeforeRead = totalDelayMs;
+    waitingForMovementComplete = true;
+    waitingAfterReadTile = false;
     
-    println("Waiting " + (sequenceWaitTime/1000) + " seconds before next position...");
+    println("Waiting for movement to complete and camera to stabilize...");
   }
 }
 
@@ -256,11 +255,14 @@ void displayStatus() {
     fill(255, 255, 255);
     text("Position: " + currentSequencePosition + "/" + (positions.length-1), 20, yPos);
     yPos += 15;
-    if (waitingAfterReadTile) {
+    if (waitingForMovementComplete) {
+      int remainingTime = (sequenceDelayBeforeRead - (millis() - sequenceStartTime)) / 1000;
+      text("Moving + stabilizing: " + max(0, remainingTime) + "s", 20, yPos);
+    } else if (waitingAfterReadTile) {
       int remainingTime = (sequenceWaitTime - (millis() - sequenceStartTime)) / 1000;
       text("Waiting: " + max(0, remainingTime) + "s", 20, yPos);
     } else {
-      text("Moving...", 20, yPos);
+      text("Starting movement...", 20, yPos);
     }
   } else {
     fill(150);
@@ -384,12 +386,14 @@ void keyPressed() {
       if (autoSequenceRunning) {
         autoSequenceRunning = false;
         waitingAfterReadTile = false;
+        waitingForMovementComplete = false;
         currentSequencePosition = 0;
         println("Auto-sequence STOPPED");
       } else {
         autoSequenceRunning = true;
         currentSequencePosition = 0;
         waitingAfterReadTile = false;
+        waitingForMovementComplete = false;
         println("Auto-sequence STARTED");
         moveToSequencePosition(0);
       }
@@ -436,6 +440,7 @@ void keyPressed() {
       // Stop auto-sequence on emergency stop
       autoSequenceRunning = false;
       waitingAfterReadTile = false;
+      waitingForMovementComplete = false;
       break;
       
     case '?':
@@ -479,6 +484,7 @@ void keyPressed() {
     // Stop auto-sequence before disconnecting
     autoSequenceRunning = false;
     waitingAfterReadTile = false;
+    waitingForMovementComplete = false;
     disconnect();
     key = 0;
   }
