@@ -1,5 +1,36 @@
+import http.requests.*;
+
 import java.io.*;
 import java.net.*;
+import processing.net.*; 
+
+
+/// l1 1329
+/// l2 1409
+
+
+/// X 930 y 890
+
+// 796 886
+
+// 581 871
+
+// 1162 737
+
+// 1040 808
+
+float[][] positions = {
+  {930, 890},                                 // 1: Top left area
+  {796, 886},                                 // 2: Top center
+  {581, 871},                                 // 3: Top right area
+  {1162, 737},                                // 4: Middle left
+  {1040, 808},                                // 5: Center
+  {1757, 697}//,
+  //{1615, 705}
+};
+
+
+
 
 Socket socket;
 PrintWriter out;
@@ -7,8 +38,8 @@ BufferedReader in;
 boolean connected = false;
 
 // Polargraph physical parameters (adjust these to match your setup)
-float machineWidth = 1400.0;    // Distance between motors in mm
-float machineHeight = 1080.0;   // Height of drawing area in mm
+float machineWidth = 2200.0;    // Distance between motors in mm
+float machineHeight = 1700.0;   // Height of drawing area in mm
 float stepsPerMM = 80.0;       // Steps per mm (800 steps/rev, 84mm/rev belt)
 
 // Current position tracking
@@ -18,11 +49,21 @@ float currentL1, currentL2;         // Current string lengths
 
 // Movement parameters
 float stepSize = 10.0;         // Movement distance in mm
-int feedRate = 4000;           // Feed rate in mm/min (slower for precision)
+int feedRate = 3000;           // Feed rate in mm/min (slower for precision)
 float segmentLength = 5.0;     // Break moves into small segments for accuracy
 
+int accumulatedX = 0;
+int accumulatedY = 0;
+
+boolean motorsEnabled = true;
+
+
+PImage bg;
+
 void setup() {
-  size(1000, 400);
+  size(670, 600);
+  
+  bg = loadImage("background.png");
   
   // Calculate initial string lengths
   updateStringLengths();
@@ -46,7 +87,7 @@ void setup() {
 }
 
 void draw() {
-  background(30);
+  background(255);
   
   // Draw machine representation
   drawMachineVisualization();
@@ -57,9 +98,11 @@ void draw() {
 
 void drawMachineVisualization() {
   // Scale factor for visualization
-  float scale = 0.4;
+  float scale = 0.25;
   float offsetX = 50;
   float offsetY = 50;
+  
+  image(bg, offsetX, offsetY-50,  machineWidth * scale, (machineHeight-300) * scale);
   
   // Draw machine frame
   stroke(100);
@@ -79,17 +122,17 @@ void drawMachineVisualization() {
   // Draw gondola position
   fill(255, 100, 100);
   noStroke();
-  ellipse(visX, visY, 8, 8);
-  
+  ellipse(visX, visY, 16, 16);
+    
   // Draw coordinate system
   stroke(80);
   strokeWeight(1);
   // Grid lines
-  for (int i = 0; i <= machineWidth; i += 50) {
+  for (int i = 0; i <= machineWidth; i += 110) {
     float x = offsetX + i * scale;
     line(x, offsetY, x, offsetY + machineHeight * scale);
   }
-  for (int i = 0; i <= machineHeight; i += 50) {
+  for (int i = 0; i <= machineHeight; i += 110) {
     float y = offsetY + i * scale;
     line(offsetX, y, offsetX + machineWidth * scale, y);
   }
@@ -108,7 +151,7 @@ void displayStatus() {
     text("● Disconnected", 20, yPos);
   }
   
-  fill(255);
+  fill(255, 0, 0);
   yPos += 20;
   text("Position: X=" + nf(currentX, 0, 1) + ", Y=" + nf(currentY, 0, 1), 20, yPos);
   yPos += 15;
@@ -117,6 +160,10 @@ void displayStatus() {
   text("Step Size: " + stepSize + "mm", 20, yPos);
   yPos += 15;
   text("Feed Rate: " + feedRate + "mm/min", 20, yPos);
+   yPos += 15;
+  text("Accumulated X: " + accumulatedX, 20, yPos);
+  yPos += 15;
+  text("Accumulated Y: " + accumulatedY, 20, yPos);
 }
 
 void connectToFluidNC() {
@@ -125,7 +172,7 @@ void connectToFluidNC() {
       socket.close();
     }
     
-    socket = new Socket("192.168.1.64", 23);
+    socket = new Socket("192.168.31.131", 23);
     out = new PrintWriter(socket.getOutputStream(), true);
     in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     connected = true;
@@ -165,6 +212,17 @@ void keyPressed() {
   float targetX = currentX;
   float targetY = currentY;
   boolean shouldMove = false;
+
+  // Handle number keys for predefined positions
+  if (key >= '0' && key <= '9') {
+    int positionIndex = key - '0';
+    if (positionIndex < positions.length) {
+      targetX = positions[positionIndex][0];
+      targetY = positions[positionIndex][1];
+      shouldMove = true;
+      println("Moving to position " + positionIndex + ": (" + targetX + ", " + targetY + ")");
+    }
+  }
   
   switch (key) {
     case 'w':
@@ -199,14 +257,14 @@ void keyPressed() {
     case 'H':
       // Home to center
       targetX = machineWidth / 2;
-      targetY = 150;
+      targetY = machineHeight / 2;
       shouldMove = true;
       break;
       
     case 'q':
     case 'Q':
       stepSize += 5.0;
-      if (stepSize > 100) stepSize = 100;
+      if (stepSize > 300) stepSize = 300;
       println("Step size: " + stepSize + "mm");
       break;
       
@@ -230,6 +288,25 @@ void keyPressed() {
     case '?':
       sendCommand("?");
       break;
+     
+    case 'k':
+      sendReadTile();
+      break;
+    
+    // Add these cases to your keyPressed() function switch statement:
+    case 'm':
+    case 'M':
+      // Toggle motor enable/disable
+      if (motorsEnabled) {
+        sendCommand("$MD");  // Motor disable command
+        motorsEnabled = false;
+        println("Motors DISABLED");
+      } else {
+        sendCommand("$ME");  // Motor enable command  
+        motorsEnabled = true;
+        println("Motors ENABLED");
+      }
+      break;
   }
   
   if (shouldMove) {
@@ -248,8 +325,19 @@ void keyPressed() {
   }
 }
 
+void sendReadTile() {
+  println("sendClearMessage");
+  GetRequest get = new GetRequest("http://0.0.0.0:3333/read_tile");
+  get.send();
+  System.out.println("Reponse Content: " + get.getContent());
+  System.out.println("Reponse Content-Length Header: " + get.getHeader("Content-Length"));
+}
+
 void moveToPosition(float targetX, float targetY) {
   println("Moving from (" + currentX + "," + currentY + ") to (" + targetX + "," + targetY + ")");
+  
+  accumulatedX += targetX - currentX;
+  accumulatedY += targetY - currentY;
   
   // Calculate total distance
   float totalDist = sqrt(pow(targetX - currentX, 2) + pow(targetY - currentY, 2));
